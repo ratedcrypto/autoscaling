@@ -1,0 +1,140 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: A sample SAM Template for Autoscale Lambda function.
+
+Parameters:
+  Environment:
+    Type: String
+  ScaleUp:
+    Type: Number
+  ScaleDown:
+    Type: Number
+  CloudWatchMetricName:
+    Type: String
+  CloudWatchMetricLabel:
+    Type: String
+  CloudWatchMetricNamespace:
+    Type: String
+  CloudWatchMetricPeriod:
+    Type: Number
+  CloudWatchMetricStat:
+    Type: String
+  CloudWatchMetricUnit:
+    Type: String
+  AutoScalingApiVersion:
+    Type: String
+  AutoScalingGroupName:
+    Type: String
+  EcsClusterName:
+    Type: String
+  EcsServiceName:
+    Type: String
+  NumberOfUsersToHandle:
+    Type: Number
+  MinimumAutoScalingGroupCapacity:
+    Type: Number
+  MaximumAutoScalingGroupCapacity:
+    Type: Number
+  MinimumEcsServiceTasksCount:
+    Type: Number
+  MaximumEcsServiceTasksCount:
+    Type: Number
+  NumberOfServiceTasksPerServer:
+    Type: Number
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    MemorySize: 3008
+    Timeout: 900
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        SCALE_UP: !Ref ScaleUp # 1=enabled, 0=disabled
+        SCALE_DOWN: !Ref ScaleDown # 1=enabled, 0=disabled
+        CLOUD_WATCH_METRIC_NAME: !Ref CloudWatchMetricName
+        CLOUD_WATCH_METRIC_LABEL: !Ref CloudWatchMetricLabel
+        CLOUD_WATCH_METRIC_NAMESPACE: !Ref CloudWatchMetricNamespace
+        CLOUD_WATCH_METRIC_PERIOD: !Ref CloudWatchMetricPeriod # In seconds
+        CLOUD_WATCH_METRIC_STAT: !Ref CloudWatchMetricStat
+        CLOUD_WATCH_METRIC_UNIT: !Ref CloudWatchMetricUnit
+        AUTO_SCALING_API_VERSION: !Ref AutoScalingApiVersion
+        AUTO_SCALING_GROUP_NAME: !Ref AutoScalingGroupName
+        ECS_CLUSTER_NAME: !Ref EcsClusterName
+        ECS_SERVICE_NAME: !Ref EcsServiceName
+        NUMBER_OF_USERS_TO_HANDLE: !Ref NumberOfUsersToHandle # Number of users to handle
+        MINIMUM_AUTO_SCALING_GROUP_CAPACITY: !Ref MinimumAutoScalingGroupCapacity # Minimum AutoScaling group capacity
+        MAXIMUM_AUTO_SCALING_GROUP_CAPACITY: !Ref MaximumAutoScalingGroupCapacity # Maximum AutoScaling group capacity
+        MINIMUM_ECS_SERVICE_TASKS_COUNT: !Ref MinimumEcsServiceTasksCount # Minimum ECS service tasks count
+        MAXIMUM_ECS_SERVICE_TASKS_COUNT: !Ref MaximumEcsServiceTasksCount # Maximum ECS service tasks count
+        NUMBER_OF_SERVICE_TASKS_PER_SERVER: !Ref NumberOfServiceTasksPerServer # Number of service tasks count per server
+
+# More info about Metadata: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-template-publishing-applications-metadata-properties.html
+Metadata:
+  AWS::ServerlessRepo::Application:
+    Name: autoscaling
+    Description: Autoscale
+    Author: Rujul Trivedi
+    ReadmeUrl: README.md
+    Labels:
+    - autoscaling
+    HomePageUrl: https://github.com/ratedcrypto/autoscaling.git
+    SemanticVersion: 0.0.1
+    SourceCodeUrl: https://github.com/ratedcrypto/autoscaling.git
+
+Resources:
+  AutoscaleFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      FunctionName: AutoscaleFunction
+      Description: Autoscale Lambda function
+      CodeUri: autoscaling
+      Handler: app.lambdaHandler
+      Runtime: nodejs12.x
+      Policies:
+        - CloudWatchReadOnlyAccess # Give CloudWatch read only access
+        - AmazonECS_FullAccess # Give ECS full access
+  AutoscaleCloudWatchEventRule:
+    Type: AWS::Events::Rule # More info about Cloud Watch Event Rule Resource: https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-events-rule.html
+    Properties:
+      Name: AutoscaleCloudWatchEventRule
+      Description: Autoscale CloudWatch event rule
+      ScheduleExpression: rate(5 minutes)
+      State: ENABLED
+      Targets:
+        - Arn:
+            Fn::GetAtt:
+              - AutoscaleFunction
+              - Arn
+          Id: TargetFunctionAutoscaleFunction
+  PermissionForEventsToInvokeLambda:
+    Type: AWS::Lambda::Permission # More info about Permission Resource: https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-events-rule.html
+    Properties:
+      FunctionName:
+        Ref: AutoscaleFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn:
+        Fn::GetAtt:
+          - AutoscaleCloudWatchEventRule
+          - Arn
+
+Outputs:
+  AutoscaleFunction:
+    Description: Autoscale Lambda Function ARN
+    Value:
+      Fn::GetAtt:
+      - AutoscaleFunction
+      - Arn
+  AutoscaleFunctionIamRole:
+    Description: Implicit IAM Role created for Autoscale Lambda Function
+    Value:
+      Fn::GetAtt:
+      - AutoscaleFunctionRole
+      - Arn
+  AutoscaleCloudWatchEventRule:
+    Description: Autoscale CloudWatchEvent Rule ARN
+    Value:
+      Fn::GetAtt:
+      - AutoscaleCloudWatchEventRule
+      - Arn
